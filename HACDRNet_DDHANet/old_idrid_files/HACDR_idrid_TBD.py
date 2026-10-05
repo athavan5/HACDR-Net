@@ -24,20 +24,20 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True),
         align_corners=False,
         loss_decode=[
-            dict(
-                type='CrossEntropyLoss',
-                loss_name='loss_1',
-                use_sigmoid=False,
-                loss_weight=1.0,
-                class_weight=[0.5, 0.7, 1.5, 0.7, 1.1],
-            ),
-            # dict(type='NALoss',
-            #      loss_name='loss_2',
-            #      thres=0.5,
-            #      loss_weight=0.2,
-            #      cls_num_list=[8.6558e+08, 1.6184e+06, 2.1746e+05, 8.5343e+05, 3.3566e+06],
-            #      class_weight=[0.5, 0.7, 1.5, 0.7, 1.1],
-            #      sigma=4, ),
+            #dict(
+                #type='CrossEntropyLoss',
+                #loss_name='loss_1',
+                #use_sigmoid=False,
+                #loss_weight=1.0,
+                #class_weight=[0.5, 0.7, 1.5, 0.7, 1.1],
+            #),
+            dict(type='NALoss',
+                 loss_name='loss_2',
+                 thres=0.5,
+                 loss_weight=0.2,
+                 cls_num_list=[1361480594, 6257823, 705964, 1323772, 7068912],
+                 class_weight=[0.5, 0.7, 1.5, 0.7, 1.1],
+                 sigma=4, ),
         ]),
     train_cfg=dict(),
     test_cfg=dict(mode='whole'))
@@ -46,9 +46,9 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
         type='FGADRDataset',
-        data_root='./data/My_dataset/',
+        data_root='./data/idrid_data/',
         img_dir='img_dir/train_idrid',
-        ann_dir='ann_dir/train_idrid',
+        ann_dir='mask_dir/train_idrid',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(type='LoadAnnotations'),
@@ -66,12 +66,40 @@ data = dict(
             dict(type='Collect', keys=['img', 'gt_semantic_seg'])
         ],
         split='splits/train_idrid.txt'),
+        
+        
+    # NEW: training-set evaluation dataset
+    train_eval=dict(
+        type='FGADRDataset',
+        data_root='./data/idrid_data/',
+        img_dir='img_dir/train_idrid',
+        ann_dir='mask_dir/train_idrid',
+        split='splits/train_idrid.txt',
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(
+                type='MultiScaleFlipAug',
+                img_scale=(960, 1440),
+                flip=False,
+                transforms=[
+                    dict(type='Resize', keep_ratio=True),
+                    dict(
+                        type='Normalize',
+                        mean=[123.675, 116.28, 103.53],
+                        std=[58.395, 57.12, 57.375],
+                        to_rgb=True),
+                    dict(type='ImageToTensor', keys=['img']),
+                    dict(type='Collect', keys=['img'])
+                ])
+        ]
+    ),
+    
     val=dict(
         type='FGADRDataset',
-        data_root='./data/My_dataset/',
-        img_dir='img_dir/train_idrid',
-        ann_dir='ann_dir/train_idrid',
-        split='splits/test_idrid.txt',
+        data_root='./data/idrid_data/',
+        img_dir='img_dir/val_idrid',
+        ann_dir='mask_dir/val_idrid',
+        split='splits/val_idrid.txt',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(
@@ -91,9 +119,9 @@ data = dict(
         ]),
     test=dict(
         type='FGADRDataset',
-        data_root='./data/My_dataset/',
-        img_dir='img_dir/train_idrid',
-        ann_dir='ann_dir/train_idrid',
+        data_root='./data/idrid_data_original_crop/',
+        img_dir='cropped_fov/val/images',
+        ann_dir='cropped_fov/val/masks',
         split='splits/test_idrid.txt',
         pipeline=[
             dict(type='LoadImageFromFile'),
@@ -139,8 +167,9 @@ lr_config = dict(
     power=1.0,
     min_lr=0.0,
     by_epoch=False)
-runner = dict(type='IterBasedRunner', max_iters=40000)
+runner = dict(type='IterBasedRunner', max_iters=2000)
 checkpoint_config = dict(by_epoch=False, interval=1000)
+train_evaluation = dict(interval=1000, metric='mDice', pre_eval=True)
 evaluation = dict(interval=1000, metric='mDice', pre_eval=True)
 work_dir = './save_dir/HACDRNet_idrid/'
 gpu_ids = [5]

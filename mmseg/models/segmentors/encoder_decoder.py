@@ -74,6 +74,8 @@ class EncoderDecoder(BaseSegmentor):
         map of the same size as input."""
         x = self.extract_feat(img)
         out = self._decode_head_forward_test(x, img_metas)
+        print("out.shape: ", out.shape)
+        print("img.shape: ", img.shape[2:])
         out = resize(
             input=out,
             size=img.shape[2:],
@@ -213,6 +215,8 @@ class EncoderDecoder(BaseSegmentor):
                 size = img.shape[2:]
             else:
                 # remove padding area
+                print("img_shape: ", img_meta[0]['img_shape'][:2])
+                print("ori_shape: ", img_meta[0]['ori_shape'][:2])
                 resize_shape = img_meta[0]['img_shape'][:2]
                 seg_logit = seg_logit[:, :, :resize_shape[0], :resize_shape[1]]
                 size = img_meta[0]['ori_shape'][:2]

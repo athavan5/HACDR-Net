@@ -2,6 +2,7 @@
 import os.path as osp
 import warnings
 
+import torch
 import torch.distributed as dist
 from mmcv.runner import DistEvalHook as _DistEvalHook
 from mmcv.runner import EvalHook as _EvalHook
@@ -30,10 +31,12 @@ class EvalHook(_EvalHook):
                  by_epoch=False,
                  efficient_test=False,
                  pre_eval=False,
+                 val_loss_dataloader=None,
                  **kwargs):
         super().__init__(*args, by_epoch=by_epoch, **kwargs)
         self.pre_eval = pre_eval
         self.latest_results = None
+        self.val_loss_dataloader = val_loss_dataloader
 
         if efficient_test:
             warnings.warn(
@@ -54,6 +57,24 @@ class EvalHook(_EvalHook):
         runner.log_buffer.clear()
         runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
         key_score = self.evaluate(runner, results)
+        
+        # Compute validation loss over the full val set
+        loss_loader = self.val_loss_dataloader if self.val_loss_dataloader is not None else self.dataloader
+        runner.model.eval()
+        val_loss_sum = 0.0
+        val_loss_count = 0
+        with torch.no_grad():
+            for data in loss_loader:
+                losses = runner.model(return_loss=True, **data)
+                loss_value = sum(
+                    v.mean() for k, v in losses.items() if 'loss' in k)
+                val_loss_sum += loss_value.item()
+                val_loss_count += 1
+        runner.model.train()
+        val_loss = val_loss_sum / val_loss_count if val_loss_count > 0 else 0.0
+        runner.logger.info(f'Validation loss: {val_loss:.4f}')
+        runner.log_buffer.output['val_loss'] = val_loss
+        
         if self.save_best:
             self._save_ckpt(runner, key_score)
 

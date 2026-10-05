@@ -2,7 +2,24 @@ from mmseg.datasets.builder import DATASETS
 from mmseg.datasets.custom import CustomDataset
 import os.path as osp
 
+@DATASETS.register_module()
+class FGADRDataset(CustomDataset):
+    CLASSES = ["background", "EX", "MA", "SE", "HE"]
+    PALETTE = [[0, 0, 0], [255, 0, 0], [255, 255, 0], [255, 255, 255], [0, 255, 0]]
 
+    def __init__(self, split, img_suffix='.jpg', seg_map_suffix='.png', **kwargs):
+        super().__init__(
+            img_suffix=img_suffix,
+            seg_map_suffix=seg_map_suffix,
+            split=split,
+            reduce_zero_label=False,
+            **kwargs
+        )
+
+        assert osp.exists(self.img_dir) and self.split is not None
+
+#OLD CODE
+'''
 @DATASETS.register_module()
 class FGADRDataset(CustomDataset):
     # CLASSES = ["background","EX","HE","SE",]
@@ -15,3 +32,4 @@ class FGADRDataset(CustomDataset):
                          split=split,reduce_zero_label=False, **kwargs)
 
         assert osp.exists(self.img_dir) and self.split is not None
+'''

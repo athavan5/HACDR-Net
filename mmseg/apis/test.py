@@ -123,9 +123,17 @@ def single_gpu_test(model,
             result = dataset.format_results(
                 result, indices=batch_indices, **format_args)
         if pre_eval:
-            # TODO: adapt samples_per_gpu > 1.
-            # only samples_per_gpu=1 valid now
-            result = dataset.pre_eval(result, indices=batch_indices)
+            img = data['img'][0]
+            img_metas = data['img_metas'][0].data[0]
+            # Move img to the same device as the model weights
+            device = next(model.parameters()).device
+            img = img.to(device)
+            with torch.no_grad():
+                prob_result = model.module.inference(img, img_metas, rescale=True)
+                prob_result = prob_result.cpu().numpy()
+            result = dataset.pre_eval(
+                result, indices=batch_indices,
+                prob_maps=list(prob_result))
             results.extend(result)
         else:
             results.extend(result)

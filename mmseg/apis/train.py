@@ -161,13 +161,30 @@ def train_segmentor(model,
             **cfg.data.get('val_dataloader', {}),
         }
         val_dataloader = build_dataloader(val_dataset, **val_loader_cfg)
+        
+        # Build val loss dataset using the train pipeline (which includes
+        # LoadAnnotations and gt_semantic_seg) but on the val split
+        import copy
+        
+        #Takes into account if training set composed of more than 1 dataset type
+        train_cfg_for_val = cfg.data.train[0] if isinstance(cfg.data.train, list) else cfg.data.train
+        
+        val_loss_cfg = copy.deepcopy(train_cfg_for_val) #initially cfg.data.train
+        val_loss_cfg.split = cfg.data.val.split
+        val_loss_cfg.data_root = cfg.data.val.data_root
+        val_loss_cfg.img_dir = cfg.data.val.img_dir
+        val_loss_cfg.ann_dir = cfg.data.val.ann_dir
+        val_loss_dataset = build_dataset(val_loss_cfg)
+        val_loss_dataloader = build_dataloader(val_loss_dataset, **val_loader_cfg)
+        
+        
         eval_cfg = cfg.get('evaluation', {})
         eval_cfg['by_epoch'] = cfg.runner['type'] != 'IterBasedRunner'
         eval_hook = DistEvalHook if distributed else EvalHook
         # In this PR (https://github.com/open-mmlab/mmcv/pull/1193), the
         # priority of IterTimerHook has been modified from 'NORMAL' to 'LOW'.
         runner.register_hook(
-            eval_hook(val_dataloader, **eval_cfg), priority='LOW')
+            eval_hook(val_dataloader, val_loss_dataloader=val_loss_dataloader, **eval_cfg), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

@@ -10,6 +10,7 @@ from prettytable import PrettyTable
 from torch.utils.data import Dataset
 
 from mmseg.core import eval_metrics, intersect_and_union, pre_eval_to_metrics
+from mmseg.core.evaluation.metrics import compute_aupr
 from mmseg.utils import get_root_logger
 from .builder import DATASETS
 from .pipelines import Compose, LoadAnnotations
@@ -274,7 +275,7 @@ class CustomDataset(Dataset):
             self.gt_seg_map_loader(results)
             yield results['gt_semantic_seg']
 
-    def pre_eval(self, preds, indices):
+    def pre_eval(self, preds, indices, prob_maps=None):
         """Collect eval result from each iteration.
 
         Args:
@@ -310,6 +311,14 @@ class CustomDataset(Dataset):
                     # for more ditails
                     label_map=dict(),
                     reduce_zero_label=self.reduce_zero_label))
+                    
+        # NEW: also accumulate prob maps and GTs for AUPR
+        if prob_maps is not None:
+            if not hasattr(self, '_aupr_probs'):
+                self._aupr_probs, self._aupr_gts = [], []
+            for prob_map, index in zip(prob_maps, indices):
+                self._aupr_probs.append(prob_map)
+                self._aupr_gts.append(self.get_gt_seg_map_by_idx(index))
 
         return pre_eval_results
 
@@ -452,6 +461,16 @@ class CustomDataset(Dataset):
         })
         ret_metrics_class.update({'Class': class_names})
         ret_metrics_class.move_to_end('Class', last=False)
+        
+        # NEW: add per-class AUPR if prob maps were collected
+        if hasattr(self, '_aupr_probs') and self._aupr_probs:
+            aupr_per_class = compute_aupr(
+                self._aupr_probs, self._aupr_gts,
+                len(self.CLASSES), self.ignore_index)
+            ret_metrics_class['AUPR'] = np.round(aupr_per_class * 100, 2)
+            ret_metrics_summary['mAUPR'] = np.round(np.nanmean(aupr_per_class) * 100, 2)
+            # clean up
+            del self._aupr_probs, self._aupr_gts
 
         # for logger
         class_table_data = PrettyTable()
@@ -461,6 +480,8 @@ class CustomDataset(Dataset):
         summary_table_data = PrettyTable()
         for key, val in ret_metrics_summary.items():
             if key == 'aAcc':
+                summary_table_data.add_column(key, [val])
+            elif key.startswith('m'):
                 summary_table_data.add_column(key, [val])
             else:
                 summary_table_data.add_column('m' + key, [val])
@@ -473,6 +494,8 @@ class CustomDataset(Dataset):
         # each metric dict
         for key, value in ret_metrics_summary.items():
             if key == 'aAcc':
+                eval_results[key] = value / 100.0
+            elif key.startswith('m'):
                 eval_results[key] = value / 100.0
             else:
                 eval_results['m' + key] = value / 100.0

@@ -4,6 +4,7 @@ from collections import OrderedDict
 import mmcv
 import numpy as np
 import torch
+from sklearn.metrics import average_precision_score
 
 
 def f_score(precision, recall, beta=1):
@@ -21,6 +22,43 @@ def f_score(precision, recall, beta=1):
     score = (1 + beta**2) * (precision * recall) / (
         (beta**2 * precision) + recall)
     return score
+    
+def compute_aupr(prob_maps, gt_seg_maps, num_classes, ignore_index=255):
+    """
+    Compute per-class AUPR from soft probability maps.
+
+    Args:
+        prob_maps (list[np.ndarray]): Per-image softmax probability maps,
+            each shape (num_classes, H, W).
+        gt_seg_maps (list[np.ndarray]): Per-image ground truth masks,
+            each shape (H, W).
+        num_classes (int): Number of classes.
+        ignore_index (int): Pixels with this label are excluded.
+
+    Returns:
+        np.ndarray: Per-class AUPR, shape (num_classes,).
+    """
+    all_probs = [[] for _ in range(num_classes)]
+    all_labels = [[] for _ in range(num_classes)]
+
+    for prob_map, gt in zip(prob_maps, gt_seg_maps):
+        mask = gt != ignore_index
+        gt_flat = gt[mask]
+        for c in range(num_classes):
+            prob_flat = prob_map[c][mask]
+            binary_label = (gt_flat == c).astype(np.float32)
+            all_probs[c].append(prob_flat)
+            all_labels[c].append(binary_label)
+
+    aupr = np.zeros(num_classes)
+    for c in range(num_classes):
+        y_true = np.concatenate(all_labels[c])
+        y_score = np.concatenate(all_probs[c])
+        if y_true.sum() > 0:  # skip classes with no positives
+            aupr[c] = average_precision_score(y_true, y_score)
+        else:
+            aupr[c] = np.nan
+    return aupr
 
 
 def intersect_and_union(pred_label,

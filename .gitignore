@@ -1,0 +1,12 @@
+*.pt
+*.pth
+*.h5
+work_dirs/
+visualized_masks/
+gpu_files/
+hpc_logs/
+train_logs/
+test_logs/
+__pycache__/
+old_train_files/
+data/
